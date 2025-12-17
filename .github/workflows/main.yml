@@ -13,7 +13,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout depot_tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
         with:
           repository: chromium/depot_tools
           path: depot_tools
