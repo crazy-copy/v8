@@ -1,4 +1,4 @@
-name: Build V8 Engine for Windows
+name: Build V8 Engine (Windows)
 
 on:
   push:
@@ -12,66 +12,38 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout depot_tools
-        uses: actions/checkout@v4
-        with:
-          repository: chromium/depot_tools
-          path: depot_tools
+    - name: Checkout repository
+      uses: actions/checkout@v2
 
-      - name: Add depot_tools to PATH
-        run: |
-          echo "%CD%\depot_tools" >> %GITHUB_PATH%
-          echo "set PATH=%CD%\depot_tools;%PATH%" >> %GITHUB_ENV%
+    - name: Set up dependencies
+      run: |
+        choco install git python3
+        python -m pip install --upgrade pip
+        python -m pip install gyp
+        choco install visualstudio2019buildtools --package-parameters "--includeRecommended --allWorkloads"
+        choco install cmake
+        choco install ninja
 
-      - name: Install dependencies
-        run: |
-          choco install -y visualstudio2022buildtools windows-sdk-10.0
-          vs_buildtools.exe --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --quiet --wait
+    - name: Install depot_tools
+      run: |
+        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        echo "depot_tools path: $(pwd)/depot_tools"
+        echo "depot_tools=$(pwd)/depot_tools" >> $GITHUB_ENV
+        echo "$(pwd)/depot_tools" >> $env:GITHUB_PATH
 
-      - name: Fetch V8 source
-        run: |
-          fetch v8
-          cd v8
-          git checkout main  # 或指定版本分支
+    - name: Set up environment for V8 build
+      run: |
+        call "$(pwd)/depot_tools/gn" gen out.gn/x64.release --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false v8_use_glibcxx=false target_cpu=\"x64\""
+        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.release
 
-      - name: Sync dependencies
-        run: |
-          cd v8
-          gclient sync
+    - name: Build static and dynamic libraries
+      run: |
+        call "$(pwd)/depot_tools/gn" gen out.gn/x64.static --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false target_cpu=\"x64\""
+        call "$(pwd)/depot_tools/gn" gen out.gn/x64.dynamic --args="is_debug=false is_component_build=true v8_use_external_startup_data=false target_cpu=\"x64\""
+        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.static v8_monolith
+        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.dynamic v8_monolith
 
-      - name: Generate build files for DLL
-        run: |
-          cd v8
-          tools/dev/v8gen.py x64.release -- '
-            is_debug = false
-            is_component_build = true
-            target_cpu = "x64"
-          '
-
-      - name: Build V8 DLL
-        run: |
-          cd v8
-          ninja -C out.gn/x64.release v8
-
-      - name: Generate build files for static library
-        run: |
-          cd v8
-          tools/dev/v8gen.py x64.release.static -- '
-            is_debug = false
-            is_component_build = false
-            target_cpu = "x64"
-          '
-
-      - name: Build V8 static library
-        run: |
-          cd v8
-          ninja -C out.gn/x64.release.static v8
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: v8-windows-build
-          path: |
-            v8/out.gn/x64.release/*.dll
-            v8/out.gn/x64.release/*.lib
-            v8/out.gn/x64.release.static/*.lib
+    - name: Verify V8 build
+      run: |
+        call out.gn/x64.static/d8 --version
+        call out.gn/x64.dynamic/d8 --version
