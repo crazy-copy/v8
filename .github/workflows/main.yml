@@ -56,7 +56,7 @@ jobs:
     - name: Verify V8 build
       run: |
         # Verify static build
-        & out.gn/x64.static/d8 --version
+        & "$(pwd)/out.gn/x64.static/d8" --version
         
         # Verify dynamic build
-        & out.gn/x64.dynamic/d8 --version
+        & "$(pwd)/out.gn/x64.dynamic/d8" --version
