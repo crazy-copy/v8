@@ -16,50 +16,98 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up dependencies
+    - name: Install dependencies
       run: |
-        choco install git python3
+        choco install -y git python3
+        choco install -y visualstudio2019buildtools --package-parameters "--includeRecommended --allWorkloads"
+        choco install -y cmake
+        choco install -y ninja
+        
+        # 设置 Python3 环境
         python -m pip install --upgrade pip
-        python -m pip install gyp
-        choco install visualstudio2019buildtools --package-parameters "--includeRecommended --allWorkloads"
-        choco install cmake
-        choco install ninja
-
-    - name: Install depot_tools
-      run: |
-        git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-        echo "depot_tools path: $(pwd)/depot_tools"
-        echo "depot_tools=$(pwd)/depot_tools" >> $GITHUB_ENV
-        echo "$(pwd)/depot_tools" >> $env:GITHUB_PATH
-
-    - name: Set up environment for V8 build
-      run: |
-        # Ensure depot_tools is in PATH
-        $gnPath = "$(pwd)/depot_tools/gn"
-        & $gnPath gen out.gn/x64.release --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false v8_use_glibcxx=false target_cpu=\"x64\""
-
-    - name: Build static and dynamic libraries
-      run: |
-        # Build static library
-        $gnPath = "$(pwd)/depot_tools/gn"
-        & $gnPath gen out.gn/x64.static --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false target_cpu=\"x64\""
         
-        # Build dynamic library
-        $gnPath = "$(pwd)/depot_tools/gn"
-        & $gnPath gen out.gn/x64.dynamic --args="is_debug=false is_component_build=true v8_use_external_startup_data=false target_cpu=\"x64\""
-        
-        # Build with ninja
-        $ninjaPath = "$(pwd)/depot_tools/ninja"
-        & $ninjaPath -C out.gn/x64.static v8_monolith
-        & $ninjaPath -C out.gn/x64.dynamic v8_monolith
+        # 克隆 depot_tools
+        if (!(Test-Path depot_tools)) {
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+        }
 
-    # Add step to upload the build artifacts
-    - name: Upload build artifacts
+    - name: Set up environment variables
+      run: |
+        # 设置 depot_tools 路径
+        $depotToolsPath = "$pwd/depot_tools"
+        echo "DEPOT_TOOLS_WIN_TOOLCHAIN=0" >> $env:GITHUB_ENV
+        echo "PATH=$depotToolsPath;$env:PATH" >> $env:GITHUB_ENV
+        
+        # 设置 V8 相关环境变量
+        echo "GYP_MSVS_VERSION=2019" >> $env:GITHUB_ENV
+        echo "V8_SRC_DIR=$pwd/v8" >> $env:GITHUB_ENV
+
+    - name: Fetch V8 source
+      run: |
+        # 设置 gclient
+        $depotToolsPath = "$pwd/depot_tools"
+        & "$depotToolsPath/gclient" config https://chromium.googlesource.com/v8/v8
+        
+        # 同步 V8 代码
+        & "$depotToolsPath/gclient" sync --verbose
+
+    - name: Build static library (debug mode for testing)
+      run: |
+        $depotToolsPath = "$pwd/depot_tools"
+        
+        # 进入 V8 目录
+        cd v8
+        
+        # 生成静态库构建配置
+        & "$depotToolsPath/gn" gen out.gn/x64.static --args='is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false target_cpu="x64"'
+        
+        # 构建 v8_monolith 库
+        & "$depotToolsPath/ninja" -C out.gn/x64.static v8_monolith
+        
+        # 构建 d8 shell（如果 v8_monolith 已经构建完成）
+        & "$depotToolsPath/ninja" -C out.gn/x64.static d8
+
+    - name: List generated files for static build
+      run: |
+        cd v8
+        
+        Write-Host "=== Static build directory contents ==="
+        if (Test-Path out.gn/x64.static) {
+          Get-ChildItem -Path out.gn/x64.static -Recurse -Filter *.exe | ForEach-Object { Write-Host $_.FullName }
+          Get-ChildItem -Path out.gn/x64.static -Recurse -Filter *.lib | ForEach-Object { Write-Host $_.FullName }
+          Get-ChildItem -Path out.gn/x64.static -Recurse -Filter *.obj | Select-Object -First 5 | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "Total files in static build: $( (Get-ChildItem -Path out.gn/x64.static -Recurse -File).Count )"
+        } else {
+          Write-Host "Static build directory does not exist"
+        }
+
+    - name: Test d8 executable
+      run: |
+        cd v8
+        
+        # 尝试运行 d8 查看版本
+        if (Test-Path out.gn/x64.static/d8.exe) {
+          Write-Host "Testing d8 executable..."
+          & out.gn/x64.static/d8.exe --version
+        } else {
+          Write-Host "d8.exe not found. Searching for executables..."
+          Get-ChildItem -Path out.gn/x64.static -Filter *.exe -Recurse
+        }
+
+    - name: Upload build artifacts (static only)
       uses: actions/upload-artifact@v4
+      if: success()
       with:
-        name: v8-build-artifacts
+        name: v8-static-build
         path: |
-          out.gn/x64.static/d8
-          out.gn/x64.static/libv8_monolith.a
-          out.gn/x64.dynamic/d8
-          out.gn/x64.dynamic/libv8_monolith.dll
+          v8/out.gn/x64.static/d8.exe
+          v8/out.gn/x64.static/v8_monolith.lib
+        retention-days: 7
+
+    - name: Upload entire build directory (as fallback)
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: v8-full-build
+        path: v8/out.gn/x64.static/
+        retention-days: 7
