@@ -54,7 +54,7 @@ jobs:
         & $ninjaPath -C out.gn/x64.dynamic v8_monolith
         
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: v8-build-artifacts
         path: |
