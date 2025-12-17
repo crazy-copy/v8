@@ -1,0 +1,77 @@
+name: Build V8 Engine for Windows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout depot_tools
+        uses: actions/checkout@v4
+        with:
+          repository: chromium/depot_tools
+          path: depot_tools
+
+      - name: Add depot_tools to PATH
+        run: |
+          echo "%CD%\depot_tools" >> %GITHUB_PATH%
+          echo "set PATH=%CD%\depot_tools;%PATH%" >> %GITHUB_ENV%
+
+      - name: Install dependencies
+        run: |
+          choco install -y visualstudio2022buildtools windows-sdk-10.0
+          vs_buildtools.exe --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows10SDK --quiet --wait
+
+      - name: Fetch V8 source
+        run: |
+          fetch v8
+          cd v8
+          git checkout main  # 或指定版本分支
+
+      - name: Sync dependencies
+        run: |
+          cd v8
+          gclient sync
+
+      - name: Generate build files for DLL
+        run: |
+          cd v8
+          tools/dev/v8gen.py x64.release -- '
+            is_debug = false
+            is_component_build = true
+            target_cpu = "x64"
+          '
+
+      - name: Build V8 DLL
+        run: |
+          cd v8
+          ninja -C out.gn/x64.release v8
+
+      - name: Generate build files for static library
+        run: |
+          cd v8
+          tools/dev/v8gen.py x64.release.static -- '
+            is_debug = false
+            is_component_build = false
+            target_cpu = "x64"
+          '
+
+      - name: Build V8 static library
+        run: |
+          cd v8
+          ninja -C out.gn/x64.release.static v8
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: v8-windows-build
+          path: |
+            v8/out.gn/x64.release/*.dll
+            v8/out.gn/x64.release/*.lib
+            v8/out.gn/x64.release.static/*.lib
