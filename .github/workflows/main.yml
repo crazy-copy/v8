@@ -53,11 +53,6 @@ jobs:
         & $ninjaPath -C out.gn/x64.static v8_monolith
         & $ninjaPath -C out.gn/x64.dynamic v8_monolith
 
-    - name: List generated files
-      run: |
-        dir out.gn/x64.static
-        dir out.gn/x64.dynamic
-
     # Add step to upload the build artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
