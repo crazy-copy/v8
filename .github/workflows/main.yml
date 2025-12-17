@@ -53,3 +53,14 @@ jobs:
         & $ninjaPath -C out.gn/x64.static v8_monolith
         & $ninjaPath -C out.gn/x64.dynamic v8_monolith
 
+
+    # Add step to upload the build artifacts
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: v8-build-artifacts
+        path: |
+          out.gn/x64.static/d8
+          out.gn/x64.static/libv8_monolith.a
+          out.gn/x64.dynamic/d8
+          out.gn/x64.dynamic/libv8_monolith.dll
