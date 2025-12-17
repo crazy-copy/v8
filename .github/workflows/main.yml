@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -33,17 +34,29 @@ jobs:
 
     - name: Set up environment for V8 build
       run: |
-        call "$(pwd)/depot_tools/gn" gen out.gn/x64.release --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false v8_use_glibcxx=false target_cpu=\"x64\""
-        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.release
+        # Ensure depot_tools is in PATH
+        $gnPath = "$(pwd)/depot_tools/gn"
+        & $gnPath gen out.gn/x64.release --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false v8_use_glibcxx=false target_cpu=\"x64\""
 
     - name: Build static and dynamic libraries
       run: |
-        call "$(pwd)/depot_tools/gn" gen out.gn/x64.static --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false target_cpu=\"x64\""
-        call "$(pwd)/depot_tools/gn" gen out.gn/x64.dynamic --args="is_debug=false is_component_build=true v8_use_external_startup_data=false target_cpu=\"x64\""
-        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.static v8_monolith
-        call "$(pwd)/depot_tools/ninja" -C out.gn/x64.dynamic v8_monolith
+        # Build static library
+        $gnPath = "$(pwd)/depot_tools/gn"
+        & $gnPath gen out.gn/x64.static --args="is_debug=false is_component_build=false v8_static_library=true v8_use_external_startup_data=false target_cpu=\"x64\""
+        
+        # Build dynamic library
+        $gnPath = "$(pwd)/depot_tools/gn"
+        & $gnPath gen out.gn/x64.dynamic --args="is_debug=false is_component_build=true v8_use_external_startup_data=false target_cpu=\"x64\""
+        
+        # Build with ninja
+        $ninjaPath = "$(pwd)/depot_tools/ninja"
+        & $ninjaPath -C out.gn/x64.static v8_monolith
+        & $ninjaPath -C out.gn/x64.dynamic v8_monolith
 
     - name: Verify V8 build
       run: |
-        call out.gn/x64.static/d8 --version
-        call out.gn/x64.dynamic/d8 --version
+        # Verify static build
+        & out.gn/x64.static/d8 --version
+        
+        # Verify dynamic build
+        & out.gn/x64.dynamic/d8 --version
