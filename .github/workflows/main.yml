@@ -54,7 +54,7 @@ jobs:
         & $ninjaPath -C out.gn/x64.dynamic v8_monolith
 
 
-    # Add step to upload the build artifacts
+    # Add step to upload the build artifacts1 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v2
       with:
