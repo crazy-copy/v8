@@ -14,7 +14,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v2
 
     - name: Set up dependencies
       run: |
@@ -52,13 +52,19 @@ jobs:
         $ninjaPath = "$(pwd)/depot_tools/ninja"
         & $ninjaPath -C out.gn/x64.static v8_monolith
         & $ninjaPath -C out.gn/x64.dynamic v8_monolith
-        
+
+    - name: List generated files
+      run: |
+        dir out.gn/x64.static
+        dir out.gn/x64.dynamic
+
+    # Add step to upload the build artifacts
     - name: Upload build artifacts
       uses: actions/upload-artifact@v3
       with:
         name: v8-build-artifacts
         path: |
-          out.gn/x64.static/d8 
-          out.gn/x64.static/libv8_monolith.a 
-          out.gn/x64.dynamic/d8 
+          out.gn/x64.static/d8
+          out.gn/x64.static/libv8_monolith.a
+          out.gn/x64.dynamic/d8
           out.gn/x64.dynamic/libv8_monolith.dll
